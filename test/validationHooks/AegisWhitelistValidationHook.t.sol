@@ -135,6 +135,77 @@ contract AegisWhitelistValidationHookTest is Test {
         assertEq(hook.assignedTier(outsider), 1);
     }
 
+    function test_setManualWhitelist_nonOwner_reverts() public {
+        // Non-owners cannot update the manual whitelist.
+        address outsider = _tierAccount(1, TIER_SIZE);
+        vm.prank(outsider);
+        vm.expectRevert();
+        hook.setManualWhitelist(1, outsider, true);
+    }
+
+    function test_setRootByTier_updatesRoot() public {
+        // Updating a tier root changes which addresses can pass validation.
+        address outsider = _tierAccount(1, TIER_SIZE);
+        bytes32[] memory newLeaves = new bytes32[](1);
+        newLeaves[0] = _leaf(outsider);
+        bytes32[] memory newTree = MerkleTreeLib.build(newLeaves);
+        bytes32 newRoot = MerkleTreeLib.root(newTree);
+
+        hook.setRootByTier(1, newRoot);
+
+        bytes32[] memory proof = MerkleTreeLib.leafProof(newTree, 0);
+        bytes memory hookData = abi.encode(uint8(1), proof);
+        vm.deal(outsider, 1 ether);
+        vm.prank(outsider);
+        uint256 bidId = auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, outsider, hookData);
+
+        assertEq(bidId, 0);
+        assertEq(hook.committed(outsider), 1 ether);
+        assertEq(hook.assignedTier(outsider), 1);
+    }
+
+    function test_setRootByTier_nonOwner_reverts() public {
+        // Non-owners cannot update tier roots.
+        address outsider = _tierAccount(1, TIER_SIZE);
+        vm.prank(outsider);
+        vm.expectRevert();
+        hook.setRootByTier(1, bytes32(uint256(1)));
+    }
+
+    function test_submitBid_manualWhitelistStillRespectsCap() public {
+        // Manual whitelist bypasses proofs but not tier caps.
+        address outsider = _tierAccount(1, TIER_SIZE);
+        hook.setManualWhitelist(1, outsider, true);
+        bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
+        bytes memory hookData = abi.encode(uint8(1), proof);
+        vm.deal(outsider, 3 ether);
+        vm.prank(outsider);
+        auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, outsider, hookData);
+
+        vm.prank(outsider);
+        vm.expectRevert();
+        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, outsider, hookData);
+    }
+
+    function test_submitBid_invalidTier_reverts() public {
+        // Tiers without roots are rejected.
+        bytes32[] memory proof = new bytes32[](0);
+        bytes memory hookData = abi.encode(uint8(4), proof);
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        vm.expectRevert();
+        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, hookData);
+    }
+
+    function test_submitBid_malformedHookData_reverts() public {
+        // Malformed hook data should revert during decoding.
+        bytes memory hookData = hex"1234";
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        vm.expectRevert();
+        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, hookData);
+    }
+
     function test_submitBid_exceedsTierCap_reverts() public {
         // Tier cap is enforced across multiple bids for the same address.
         bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
