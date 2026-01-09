@@ -6,9 +6,9 @@ import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {IAegisWhitelistValidationHook} from "../interfaces/IAegisWhitelistValidationHook.sol";
 
 contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable, ERC1155 {
-    uint8 public constant TIER_ONE = 1;
-    uint8 public constant TIER_TWO = 2;
-    uint8 public constant TIER_THREE = 3;
+    uint8 public constant TIER_ONE = 0;
+    uint8 public constant TIER_TWO = 1;
+    uint8 public constant TIER_THREE = 2;
 
     mapping(uint8 => uint128) public maxBidByTier;
     uint64 public auctionStart;

@@ -19,7 +19,7 @@ contract AegisWhitelistValidationHookTest is Test {
     uint128 private constant TIER_ONE_MAX = 2 ether;
     uint128 private constant TIER_TWO_MAX = 10 ether;
     uint128 private constant TIER_THREE_MAX = 50 ether;
-    uint256 private constant TIER_ONE_ID = 1;
+    uint256 private constant TIER_ONE_ID = 0;
 
     uint64 private constant PHASE_ONE_BLOCKS = 26;
     uint64 private constant PHASE_TWO_BLOCKS = 24;
