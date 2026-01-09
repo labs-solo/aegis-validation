@@ -51,11 +51,10 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable 
         (uint8 tier, bytes32[] memory proof) = abi.decode(hookData, (uint8, bytes32[]));
         // Look up the Merkle root for the provided tier.
         bytes32 root = rootByTier[tier];
-        // A zero root means the tier is not configured.
-        if (root == bytes32(0)) revert InvalidTier(tier);
-
         // Skip proof verification if manually whitelisted for this tier.
         if (!manualWhitelist[tier][owner]) {
+            // A zero root means the tier is not configured.
+            if (root == bytes32(0)) revert InvalidTier(tier);
             // Leaf is the keccak256 of the bidder address.
             bytes32 leaf = keccak256(abi.encodePacked(owner));
             // Validate the Merkle proof against the tier root.
