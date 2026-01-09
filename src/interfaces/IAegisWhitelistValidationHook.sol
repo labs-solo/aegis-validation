@@ -4,64 +4,84 @@ pragma solidity ^0.8.26;
 import {IValidationHook} from "continuous-clearing-auction/src/interfaces/IValidationHook.sol";
 
 /// @title IAegisWhitelistValidationHook
-/// @notice Interface for the tiered whitelist validation hook used by the auction.
+/// @notice Interface for the tiered membership validation hook used by the auction.
 interface IAegisWhitelistValidationHook is IValidationHook {
-    /// @notice Thrown when a provided tier does not exist.
-    /// @param tier The tier id passed in hook data.
-    error InvalidTier(uint8 tier);
+    /// @notice Thrown when the auction start has not been initialized.
+    error AuctionNotStarted();
 
-    /// @notice Thrown when a Merkle proof does not validate against the tier root.
-    error InvalidProof();
+    /// @notice Thrown when attempting to start the auction twice.
+    /// @param startedAt The block number of the existing start.
+    error AuctionAlreadyStarted(uint64 startedAt);
 
-    /// @notice Thrown when a bidder attempts to use a different tier after assignment.
-    /// @param expected The tier previously assigned to the bidder.
-    /// @param provided The tier supplied in the hook data.
-    error TierMismatch(uint8 expected, uint8 provided);
+    /// @notice Thrown when a bid exceeds the tier max bid for the current window.
+    /// @param attempted The bid amount.
+    /// @param maxBid The maximum allowed bid for the current window.
+    error ExceedsTierMaxBid(uint256 attempted, uint256 maxBid);
 
-    /// @notice Thrown when a bid would exceed the tier cap.
-    /// @param tier The tier id used for the cap.
-    /// @param attempted The total committed amount after the bid.
-    /// @param cap The maximum allowed for the tier.
-    error ExceedsTierCap(uint8 tier, uint256 attempted, uint256 cap);
+    /// @notice Thrown when the bidder does not hold any eligible tier token.
+    error NoEligibleTier();
 
     /// @notice Thrown when the bid owner does not match the sender.
     /// @param owner The bid owner address.
     /// @param sender The caller address.
     error OwnerSenderMismatch(address owner, address sender);
 
-    /// @notice Returns the Merkle root for a tier.
+    /// @notice Thrown when attempting to transfer a non-transferable tier token.
+    error TransfersDisabled();
+
+    /// @notice Thrown when minting a tier token to an account that already has it.
     /// @param tier The tier id.
-    /// @return root The Merkle root for the tier.
-    function rootByTier(uint8 tier) external view returns (bytes32 root);
+    /// @param account The account that already holds the tier token.
+    error AlreadyHasTier(uint8 tier, address account);
 
-    /// @notice Returns the commitment cap for a tier.
+    /// @notice Returns the max bid amount for a tier.
     /// @param tier The tier id.
-    /// @return cap The maximum commitment in wei for the tier.
-    function capByTier(uint8 tier) external view returns (uint128 cap);
+    /// @return maxBid The max bid amount in wei.
+    function maxBidByTier(uint8 tier) external view returns (uint128 maxBid);
 
-    /// @notice Returns the total committed amount for a bidder.
-    /// @param account The bidder address.
-    /// @return amount The committed amount in wei.
-    function committed(address account) external view returns (uint128 amount);
+    /// @notice Returns the auction start block.
+    /// @return startBlock The start block number.
+    function auctionStart() external view returns (uint64 startBlock);
 
-    /// @notice Returns the tier assigned to a bidder after their first valid bid.
-    /// @param account The bidder address.
-    /// @return tier The assigned tier id.
-    function assignedTier(address account) external view returns (uint8 tier);
+    /// @notice Returns the phase one duration in blocks.
+    /// @return duration The phase one duration in blocks.
+    function phaseOneDuration() external view returns (uint64 duration);
 
-    /// @notice Returns true if an address is manually whitelisted for a tier.
-    /// @param tier The tier id.
-    /// @param account The address to check.
-    /// @return allowed Whether the address is manually allowed for the tier.
-    function manualWhitelist(uint8 tier, address account) external view returns (bool allowed);
+    /// @notice Returns the phase two duration in blocks.
+    /// @return duration The phase two duration in blocks.
+    function phaseTwoDuration() external view returns (uint64 duration);
 
-    /// @notice Add an address to the manual whitelist for a tier.
-    /// @param tier The tier id.
-    /// @param account The address to whitelist.
-    function setManualWhitelist(uint8 tier, address account, bool allowed) external;
+    /// @notice Returns the current metadata URI.
+    /// @return uri The token URI string.
+    function tokenURI() external view returns (string memory uri);
 
-    /// @notice Update the Merkle root for a tier.
-    /// @param tier The tier id.
-    /// @param root The new Merkle root.
-    function setRootByTier(uint8 tier, bytes32 root) external;
+    /// @notice Start the tiered access windows.
+    /// @param phaseOneBlocks The number of blocks for the tier-three-only phase.
+    /// @param phaseTwoBlocks The number of blocks for the tier-two-and-three phase.
+    function startAuction(uint64 phaseOneBlocks, uint64 phaseTwoBlocks) external;
+
+    /// @notice Returns the current phase (0 = not started, 1 = tier three, 2 = tier two/three, 3 = all tiers).
+    function currentPhase() external view returns (uint8);
+
+    /// @notice Returns remaining blocks until phase two begins.
+    function blocksUntilPhaseTwo() external view returns (uint256);
+
+    /// @notice Returns remaining blocks until phase three begins.
+    function blocksUntilPhaseThree() external view returns (uint256);
+
+    /// @notice Mint a tier-one membership token.
+    /// @param to The address receiving the token.
+    function mintTierOne(address to) external;
+
+    /// @notice Mint a tier-two membership token.
+    /// @param to The address receiving the token.
+    function mintTierTwo(address to) external;
+
+    /// @notice Mint a tier-three membership token.
+    /// @param to The address receiving the token.
+    function mintTierThree(address to) external;
+
+    /// @notice Update the metadata URI used for all tier tokens.
+    /// @param _uri The new metadata URI.
+    function setTokenURI(string memory _uri) external;
 }

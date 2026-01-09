@@ -6,10 +6,8 @@ import {AegisWhitelistValidationHook} from "../../src/validationHooks/AegisWhite
 import {ContinuousClearingAuction} from "continuous-clearing-auction/src/ContinuousClearingAuction.sol";
 import {AuctionParameters} from "continuous-clearing-auction/src/interfaces/IContinuousClearingAuction.sol";
 import {AuctionStepsBuilder} from "continuous-clearing-auction/test/utils/AuctionStepsBuilder.sol";
-import {ValidationHookLib} from "continuous-clearing-auction/src/libraries/ValidationHookLib.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
 import {FixedPoint96} from "@uniswap/v4-core/src/libraries/FixedPoint96.sol";
-import {MerkleTreeLib} from "@solady/src/utils/MerkleTreeLib.sol";
 
 contract AegisWhitelistValidationHookTest is Test {
     using AuctionStepsBuilder for bytes;
@@ -17,7 +15,14 @@ contract AegisWhitelistValidationHookTest is Test {
     uint128 private constant TOTAL_SUPPLY = 1_000e18;
     uint256 private constant FLOOR_PRICE = 1000 << FixedPoint96.RESOLUTION;
     uint256 private constant TICK_SPACING = 100 << FixedPoint96.RESOLUTION;
-    uint256 private constant TIER_SIZE = 50;
+
+    uint128 private constant TIER_ONE_MAX = 2 ether;
+    uint128 private constant TIER_TWO_MAX = 10 ether;
+    uint128 private constant TIER_THREE_MAX = 50 ether;
+    uint256 private constant TIER_ONE_ID = 1;
+
+    uint64 private constant PHASE_ONE_BLOCKS = 26;
+    uint64 private constant PHASE_TWO_BLOCKS = 24;
 
     address private alice;
     address private bob;
@@ -26,22 +31,13 @@ contract AegisWhitelistValidationHookTest is Test {
     AegisWhitelistValidationHook private hook;
     ContinuousClearingAuction private auction;
     MockERC20 private token;
-    bytes32[] private tierOneTree;
-    bytes32[] private tierTwoTree;
-    bytes32[] private tierThreeTree;
 
     function setUp() public {
-        alice = _tierAccount(1, 0);
-        bob = _tierAccount(2, 0);
-        carol = _tierAccount(3, 0);
+        alice = makeAddr("alice");
+        bob = makeAddr("bob");
+        carol = makeAddr("carol");
 
-        (bytes32[] memory treeOne, bytes32 rootTierOne) = _buildTierTree(1);
-        (bytes32[] memory treeTwo, bytes32 rootTierTwo) = _buildTierTree(2);
-        (bytes32[] memory treeThree, bytes32 rootTierThree) = _buildTierTree(3);
-        tierOneTree = treeOne;
-        tierTwoTree = treeTwo;
-        tierThreeTree = treeThree;
-        hook = new AegisWhitelistValidationHook(rootTierOne, rootTierTwo, rootTierThree, 2 ether, 10 ether, 50 ether);
+        hook = new AegisWhitelistValidationHook(TIER_ONE_MAX, TIER_TWO_MAX, TIER_THREE_MAX);
 
         bytes memory steps = AuctionStepsBuilder.init().addStep(100e3, 50).addStep(100e3, 50);
         AuctionParameters memory params = AuctionParameters({
@@ -64,219 +60,121 @@ contract AegisWhitelistValidationHookTest is Test {
         auction.onTokensReceived();
     }
 
-    function test_submitBid_withTierOneProof_succeeds() public {
-        // Valid tier-1 member can bid within cap using a correct proof.
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
-        bytes memory hookData = abi.encode(uint8(1), proof);
+    function test_submitBid_requiresAuctionStarted_reverts() public {
+        hook.mintTierThree(alice);
         vm.deal(alice, 3 ether);
         vm.prank(alice);
-        uint256 bidId = auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, hookData);
-
-        assertEq(bidId, 0);
-        assertEq(hook.committed(alice), 2 ether);
-        assertEq(hook.assignedTier(alice), 1);
+        vm.expectRevert();
+        auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, bytes(""));
     }
 
-    function test_submitBid_withTierTwoProof_succeeds() public {
-        // Valid tier-2 member can bid within cap using a correct proof.
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierTwoTree, 0);
-        bytes memory hookData = abi.encode(uint8(2), proof);
-        vm.deal(bob, 5 ether);
+    function test_submitBid_tierThreeOnlyWindow_allowsTierThree() public {
+        _startAuction();
+        _rollAfter(1);
+        hook.mintTierThree(alice);
+        vm.deal(alice, 3 ether);
+        vm.prank(alice);
+        uint256 bidId = auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, bytes(""));
+
+        assertEq(bidId, 0);
+    }
+
+    function test_submitBid_tierThreeOnlyWindow_rejectsTierTwo() public {
+        _startAuction();
+        _rollAfter(1);
+        hook.mintTierTwo(bob);
+        vm.deal(bob, 3 ether);
         vm.prank(bob);
-        uint256 bidId = auction.submitBid{value: 4 ether}(FLOOR_PRICE + TICK_SPACING, 4 ether, bob, hookData);
-
-        assertEq(bidId, 0);
-        assertEq(hook.committed(bob), 4 ether);
-        assertEq(hook.assignedTier(bob), 2);
+        vm.expectRevert();
+        auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, bob, bytes(""));
     }
 
-    function test_submitBid_withTierThreeProof_succeeds() public {
-        // Valid tier-3 member can bid within cap using a correct proof.
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierThreeTree, 0);
-        bytes memory hookData = abi.encode(uint8(3), proof);
-        vm.deal(carol, 12 ether);
-        vm.prank(carol);
-        uint256 bidId = auction.submitBid{value: 8 ether}(FLOOR_PRICE + TICK_SPACING, 8 ether, carol, hookData);
+    function test_submitBid_tierTwoWindow_allowsTierTwo() public {
+        _startAuction();
+        _rollAfter(uint256(PHASE_ONE_BLOCKS) + 1);
+        hook.mintTierTwo(bob);
+        vm.deal(bob, 6 ether);
+        vm.prank(bob);
+        uint256 bidId = auction.submitBid{value: 4 ether}(FLOOR_PRICE + TICK_SPACING, 4 ether, bob, bytes(""));
 
         assertEq(bidId, 0);
-        assertEq(hook.committed(carol), 8 ether);
-        assertEq(hook.assignedTier(carol), 3);
+    }
+
+    function test_submitBid_allTiersWindow_allowsTierOne() public {
+        _startAuction();
+        _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
+        hook.mintTierOne(alice);
+        vm.deal(alice, 3 ether);
+        vm.prank(alice);
+        uint256 bidId = auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, bytes(""));
+
+        assertEq(bidId, 0);
+    }
+
+    function test_submitBid_exceedsTierLimit_reverts() public {
+        _startAuction();
+        _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
+        hook.mintTierOne(alice);
+        vm.deal(alice, 3 ether);
+        vm.prank(alice);
+        vm.expectRevert();
+        auction.submitBid{value: 3 ether}(FLOOR_PRICE + TICK_SPACING, 3 ether, alice, bytes(""));
     }
 
     function test_submitBid_ownerMustMatchSender_reverts() public {
-        // Bid owner must match the caller.
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
-        bytes memory hookData = abi.encode(uint8(1), proof);
+        _startAuction();
+        _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
+        hook.mintTierOne(alice);
         vm.deal(bob, 1 ether);
         vm.prank(bob);
         vm.expectRevert();
-        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, hookData);
+        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, bytes(""));
     }
 
     function test_submitBid_bidIdStartsAtZeroAndIncrements() public {
-        // Bid ids are assigned sequentially starting at zero.
-        bytes32[] memory proofOne = MerkleTreeLib.leafProof(tierOneTree, 0);
-        bytes memory hookDataOne = abi.encode(uint8(1), proofOne);
+        _startAuction();
+        _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
+        hook.mintTierOne(alice);
+        hook.mintTierTwo(bob);
+
         vm.deal(alice, 3 ether);
         vm.prank(alice);
-        uint256 firstBidId = auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, hookDataOne);
+        uint256 firstBidId = auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, bytes(""));
         assertEq(firstBidId, 0);
 
-        bytes32[] memory proofTwo = MerkleTreeLib.leafProof(tierTwoTree, 0);
-        bytes memory hookDataTwo = abi.encode(uint8(2), proofTwo);
         vm.deal(bob, 3 ether);
         vm.prank(bob);
-        uint256 secondBidId = auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, bob, hookDataTwo);
+        uint256 secondBidId = auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, bob, bytes(""));
         assertEq(secondBidId, 1);
     }
 
-    function test_submitBid_manualWhitelistBypassesProof() public {
-        // Manually whitelisted addresses can bid without a valid proof.
-        address outsider = _tierAccount(1, TIER_SIZE);
-        hook.setManualWhitelist(1, outsider, true);
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
-        bytes memory hookData = abi.encode(uint8(1), proof);
-        vm.deal(outsider, 2 ether);
-        vm.prank(outsider);
-        uint256 bidId = auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, outsider, hookData);
-
-        assertEq(bidId, 0);
-        assertEq(hook.committed(outsider), 1 ether);
-        assertEq(hook.assignedTier(outsider), 1);
-    }
-
-    function test_setManualWhitelist_nonOwner_reverts() public {
-        // Non-owners cannot update the manual whitelist.
-        address outsider = _tierAccount(1, TIER_SIZE);
-        vm.prank(outsider);
-        vm.expectRevert();
-        hook.setManualWhitelist(1, outsider, true);
-    }
-
-    function test_setRootByTier_updatesRoot() public {
-        // Updating a tier root changes which addresses can pass validation.
-        address outsider = _tierAccount(1, TIER_SIZE);
-        bytes32[] memory newLeaves = new bytes32[](1);
-        newLeaves[0] = _leaf(outsider);
-        bytes32[] memory newTree = MerkleTreeLib.build(newLeaves);
-        bytes32 newRoot = MerkleTreeLib.root(newTree);
-
-        hook.setRootByTier(1, newRoot);
-
-        bytes32[] memory proof = MerkleTreeLib.leafProof(newTree, 0);
-        bytes memory hookData = abi.encode(uint8(1), proof);
-        vm.deal(outsider, 1 ether);
-        vm.prank(outsider);
-        uint256 bidId = auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, outsider, hookData);
-
-        assertEq(bidId, 0);
-        assertEq(hook.committed(outsider), 1 ether);
-        assertEq(hook.assignedTier(outsider), 1);
-    }
-
-    function test_setRootByTier_nonOwner_reverts() public {
-        // Non-owners cannot update tier roots.
-        address outsider = _tierAccount(1, TIER_SIZE);
-        vm.prank(outsider);
-        vm.expectRevert();
-        hook.setRootByTier(1, bytes32(uint256(1)));
-    }
-
-    function test_submitBid_manualWhitelistStillRespectsCap() public {
-        // Manual whitelist bypasses proofs but not tier caps.
-        address outsider = _tierAccount(1, TIER_SIZE);
-        hook.setManualWhitelist(1, outsider, true);
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
-        bytes memory hookData = abi.encode(uint8(1), proof);
-        vm.deal(outsider, 3 ether);
-        vm.prank(outsider);
-        auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, outsider, hookData);
-
-        vm.prank(outsider);
-        vm.expectRevert();
-        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, outsider, hookData);
-    }
-
-    function test_submitBid_invalidTier_reverts() public {
-        // Tiers without roots are rejected.
-        bytes32[] memory proof = new bytes32[](0);
-        bytes memory hookData = abi.encode(uint8(4), proof);
-        vm.deal(alice, 1 ether);
+    function test_submitBid_requiresTierToken_reverts() public {
+        _startAuction();
+        _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
+        vm.deal(alice, 2 ether);
         vm.prank(alice);
         vm.expectRevert();
-        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, hookData);
+        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, bytes(""));
     }
 
-    function test_submitBid_malformedHookData_reverts() public {
-        // Malformed hook data should revert during decoding.
-        bytes memory hookData = hex"1234";
-        vm.deal(alice, 1 ether);
+    function test_tierTokenTransfer_reverts() public {
+        hook.mintTierOne(alice);
         vm.prank(alice);
         vm.expectRevert();
-        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, hookData);
+        hook.safeTransferFrom(alice, bob, TIER_ONE_ID, 1, bytes(""));
     }
 
-    function test_submitBid_exceedsTierCap_reverts() public {
-        // Tier cap is enforced across multiple bids for the same address.
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
-        bytes memory hookData = abi.encode(uint8(1), proof);
-        vm.deal(alice, 4 ether);
-        vm.prank(alice);
-        auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, hookData);
-
-        vm.prank(alice);
+    function test_mintTier_revertsWhenAlreadyOwned() public {
+        hook.mintTierOne(alice);
         vm.expectRevert();
-        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, hookData);
+        hook.mintTierOne(alice);
     }
 
-    function test_submitBid_afterAllocFilled_reverts() public {
-        // Re-entering after fully committing a tier allocation should fail.
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
-        bytes memory hookData = abi.encode(uint8(1), proof);
-        vm.deal(alice, 3 ether);
-        vm.prank(alice);
-        auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, hookData);
-
-        vm.prank(alice);
-        vm.expectRevert();
-        auction.submitBid{value: 0.1 ether}(FLOOR_PRICE + TICK_SPACING, 0.1 ether, alice, hookData);
+    function _startAuction() private {
+        hook.startAuction(PHASE_ONE_BLOCKS, PHASE_TWO_BLOCKS);
     }
 
-    function test_submitBid_notInTree_reverts() public {
-        // Address not present in the tier tree is rejected even with a proof.
-        address outsider = _tierAccount(1, TIER_SIZE);
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
-        bytes memory hookData = abi.encode(uint8(1), proof);
-        vm.deal(outsider, 1 ether);
-        vm.prank(outsider);
-        vm.expectRevert();
-        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, outsider, hookData);
-    }
-
-    function test_submitBid_wrongTierProof_reverts() public {
-        // Using a proof from a different tier should fail validation.
-        bytes32[] memory proof = MerkleTreeLib.leafProof(tierTwoTree, 0);
-        bytes memory hookData = abi.encode(uint8(1), proof);
-        vm.deal(bob, 1 ether);
-        vm.prank(bob);
-        vm.expectRevert();
-        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, bob, hookData);
-    }
-
-    function _leaf(address account) private pure returns (bytes32) {
-        return keccak256(abi.encodePacked(account));
-    }
-
-    function _tierAccount(uint8 tier, uint256 index) private pure returns (address) {
-        return address(uint160(uint256(keccak256(abi.encodePacked(tier, index)))));
-    }
-
-    function _buildTierTree(uint8 tier) private pure returns (bytes32[] memory tree, bytes32 root) {
-        bytes32[] memory leaves = new bytes32[](TIER_SIZE);
-        for (uint256 i = 0; i < TIER_SIZE; i++) {
-            leaves[i] = _leaf(_tierAccount(tier, i));
-        }
-        tree = MerkleTreeLib.build(leaves);
-        root = MerkleTreeLib.root(tree);
+    function _rollAfter(uint256 delta) private {
+        vm.roll(uint256(hook.auctionStart()) + delta);
     }
 }
