@@ -103,6 +103,16 @@ contract AegisWhitelistValidationHookTest is Test {
         assertEq(hook.assignedTier(carol), 3);
     }
 
+    function test_submitBid_ownerMustMatchSender_reverts() public {
+        // Bid owner must match the caller.
+        bytes32[] memory proof = MerkleTreeLib.leafProof(tierOneTree, 0);
+        bytes memory hookData = abi.encode(uint8(1), proof);
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert();
+        auction.submitBid{value: 1 ether}(FLOOR_PRICE + TICK_SPACING, 1 ether, alice, hookData);
+    }
+
     function test_submitBid_bidIdStartsAtZeroAndIncrements() public {
         // Bid ids are assigned sequentially starting at zero.
         bytes32[] memory proofOne = MerkleTreeLib.leafProof(tierOneTree, 0);

@@ -24,6 +24,11 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @param cap The maximum allowed for the tier.
     error ExceedsTierCap(uint8 tier, uint256 attempted, uint256 cap);
 
+    /// @notice Thrown when the bid owner does not match the sender.
+    /// @param owner The bid owner address.
+    /// @param sender The caller address.
+    error OwnerSenderMismatch(address owner, address sender);
+
     /// @notice Returns the Merkle root for a tier.
     /// @param tier The tier id.
     /// @return root The Merkle root for the tier.

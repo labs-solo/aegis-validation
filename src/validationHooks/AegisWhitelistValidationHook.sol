@@ -6,7 +6,6 @@ import {MerkleProofLib} from "@solady/src/utils/MerkleProofLib.sol";
 import {IAegisWhitelistValidationHook} from "../interfaces/IAegisWhitelistValidationHook.sol";
 
 contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable {
-
     uint8 public constant TIER_ONE = 1;
     uint8 public constant TIER_TWO = 2;
     uint8 public constant TIER_THREE = 3;
@@ -46,7 +45,12 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable 
     }
 
     // Validate bids using tiered caps and either manual whitelist or Merkle proof membership.
-    function validate(uint256, uint128 amount, address owner, address, bytes calldata hookData) external override {
+    function validate(uint256, uint128 amount, address owner, address sender, bytes calldata hookData)
+        external
+        override
+    {
+        // Require the bid owner to be the caller.
+        if (owner != sender) revert OwnerSenderMismatch(owner, sender);
         // Decode tier + Merkle proof from hook data (encoded off-chain).
         (uint8 tier, bytes32[] memory proof) = abi.decode(hookData, (uint8, bytes32[]));
         // Look up the Merkle root for the provided tier.
