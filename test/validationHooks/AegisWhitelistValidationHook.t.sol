@@ -7,6 +7,7 @@ import {ContinuousClearingAuction} from "continuous-clearing-auction/src/Continu
 import {AuctionParameters} from "continuous-clearing-auction/src/interfaces/IContinuousClearingAuction.sol";
 import {AuctionStepsBuilder} from "continuous-clearing-auction/test/utils/AuctionStepsBuilder.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";
+import {MockERC721} from "../mocks/MockERC721.sol";
 import {FixedPoint96} from "@uniswap/v4-core/src/libraries/FixedPoint96.sol";
 
 contract AegisWhitelistValidationHookTest is Test {
@@ -16,9 +17,6 @@ contract AegisWhitelistValidationHookTest is Test {
     uint256 private constant FLOOR_PRICE = 1000 << FixedPoint96.RESOLUTION;
     uint256 private constant TICK_SPACING = 100 << FixedPoint96.RESOLUTION;
 
-    uint128 private constant TIER_ONE_MAX = 2 ether;
-    uint128 private constant TIER_TWO_MAX = 10 ether;
-    uint128 private constant TIER_THREE_MAX = 50 ether;
     uint256 private constant TIER_ONE_ID = 0;
 
     uint64 private constant PHASE_ONE_BLOCKS = 26;
@@ -31,13 +29,17 @@ contract AegisWhitelistValidationHookTest is Test {
     AegisWhitelistValidationHook private hook;
     ContinuousClearingAuction private auction;
     MockERC20 private token;
+    MockERC721 private positionManager;
+    uint256 private nextTokenId;
 
     function setUp() public {
         alice = makeAddr("alice");
         bob = makeAddr("bob");
         carol = makeAddr("carol");
 
-        hook = new AegisWhitelistValidationHook(TIER_ONE_MAX, TIER_TWO_MAX, TIER_THREE_MAX);
+        positionManager = new MockERC721("V4 Positions", "V4POS");
+        hook = new AegisWhitelistValidationHook(address(positionManager));
+        nextTokenId = 1;
 
         bytes memory steps = AuctionStepsBuilder.init().addStep(100e3, 50).addStep(100e3, 50);
         AuctionParameters memory params = AuctionParameters({
@@ -61,6 +63,7 @@ contract AegisWhitelistValidationHookTest is Test {
     }
 
     function test_submitBid_requiresAuctionStarted_reverts() public {
+        _mintV4Position(alice);
         hook.mintTierThree(alice);
         vm.deal(alice, 3 ether);
         vm.prank(alice);
@@ -71,6 +74,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_tierThreeOnlyWindow_allowsTierThree() public {
         _startAuction();
         _rollAfter(1);
+        _mintV4Position(alice);
         hook.mintTierThree(alice);
         vm.deal(alice, 3 ether);
         vm.prank(alice);
@@ -164,6 +168,11 @@ contract AegisWhitelistValidationHookTest is Test {
         hook.safeTransferFrom(alice, bob, TIER_ONE_ID, 1, bytes(""));
     }
 
+    function test_mintTierThree_requiresV4Position() public {
+        vm.expectRevert();
+        hook.mintTierThree(alice);
+    }
+
     function test_mintTier_revertsWhenAlreadyOwned() public {
         hook.mintTierOne(alice);
         vm.expectRevert();
@@ -171,10 +180,15 @@ contract AegisWhitelistValidationHookTest is Test {
     }
 
     function _startAuction() private {
-        hook.startAuction(PHASE_ONE_BLOCKS, PHASE_TWO_BLOCKS);
+        hook.startAuction(address(auction), PHASE_ONE_BLOCKS, PHASE_TWO_BLOCKS);
     }
 
     function _rollAfter(uint256 delta) private {
         vm.roll(uint256(hook.auctionStart()) + delta);
+    }
+
+    function _mintV4Position(address to) private {
+        positionManager.mint(to, nextTokenId);
+        nextTokenId += 1;
     }
 }

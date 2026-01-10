@@ -4,32 +4,42 @@ pragma solidity ^0.8.26;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {IAegisWhitelistValidationHook} from "../interfaces/IAegisWhitelistValidationHook.sol";
+import {IContinuousClearingAuction} from "continuous-clearing-auction/src/interfaces/IContinuousClearingAuction.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable, ERC1155 {
     uint8 public constant TIER_ONE = 0;
     uint8 public constant TIER_TWO = 1;
     uint8 public constant TIER_THREE = 2;
 
+    address public v4PositionManager;
+
     mapping(uint8 => uint128) public maxBidByTier;
+    address public auction;
     uint64 public auctionStart;
     uint64 public phaseOneDuration;
     uint64 public phaseTwoDuration;
     string public tokenURI;
 
     // Initialize tier max bids for each membership tier.
-    constructor(uint128 maxBidTierOne, uint128 maxBidTierTwo, uint128 maxBidTierThree)
+    constructor(address v4PositionManager_)
         Ownable()
-        ERC1155("Aegis Auction Pass")
+        ERC1155("")
     {
-        maxBidByTier[TIER_ONE] = maxBidTierOne;
-        maxBidByTier[TIER_TWO] = maxBidTierTwo;
-        maxBidByTier[TIER_THREE] = maxBidTierThree;
+        if (v4PositionManager_ == address(0)) revert InvalidV4PositionManager(v4PositionManager_);
+        v4PositionManager = v4PositionManager_;
+        maxBidByTier[TIER_ONE] = 2 ether;
+        maxBidByTier[TIER_TWO] = 10 ether;
+        maxBidByTier[TIER_THREE] = 50 ether;
     }
 
-    // Owner-only start for the tiered access windows.
-    function startAuction(uint64 phaseOneBlocks, uint64 phaseTwoBlocks) external onlyOwner {
+    // Owner or owner-originated transactions can begin the tiered access windows.
+    function startAuction(address auctionAddress, uint64 phaseOneBlocks, uint64 phaseTwoBlocks) external onlyOwner {
         if (auctionStart != 0) revert AuctionAlreadyStarted(auctionStart);
-        auctionStart = uint64(block.number);
+        if (auctionAddress == address(0)) revert AuctionNotSet();
+        auction = auctionAddress;
+        auctionStart = IContinuousClearingAuction(auctionAddress).startBlock();
+        if (auctionStart == 0) revert AuctionNotStarted();
         phaseOneDuration = phaseOneBlocks;
         phaseTwoDuration = phaseTwoBlocks;
     }
@@ -47,6 +57,7 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
 
     function mintTierThree(address to) external onlyOwner {
         if (balanceOf(to, TIER_THREE) != 0) revert AlreadyHasTier(TIER_THREE, to);
+        if (IERC721(v4PositionManager).balanceOf(to) == 0) revert MissingV4Position(to);
         _mint(to, TIER_THREE, 1, "");
     }
 

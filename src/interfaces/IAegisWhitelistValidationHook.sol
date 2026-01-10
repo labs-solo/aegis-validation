@@ -9,9 +9,20 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @notice Thrown when the auction start has not been initialized.
     error AuctionNotStarted();
 
+    /// @notice Thrown when the auction address has not been configured.
+    error AuctionNotSet();
+
+    /// @notice Thrown when the v4 position manager address is invalid.
+    /// @param manager The provided manager address.
+    error InvalidV4PositionManager(address manager);
+
     /// @notice Thrown when attempting to start the auction twice.
     /// @param startedAt The block number of the existing start.
     error AuctionAlreadyStarted(uint64 startedAt);
+
+    /// @notice Thrown when a caller is not authorized to start the auction windows.
+    /// @param caller The unauthorized caller.
+    error UnauthorizedAuctionStarter(address caller);
 
     /// @notice Thrown when a bid exceeds the tier max bid for the current window.
     /// @param attempted The bid amount.
@@ -34,6 +45,10 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @param account The account that already holds the tier token.
     error AlreadyHasTier(uint8 tier, address account);
 
+    /// @notice Thrown when minting tier three without holding a v4 position NFT.
+    /// @param account The account missing a v4 position NFT.
+    error MissingV4Position(address account);
+
     /// @notice Returns the max bid amount for a tier.
     /// @param tier The tier id.
     /// @return maxBid The max bid amount in wei.
@@ -42,6 +57,12 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @notice Returns the auction start block.
     /// @return startBlock The start block number.
     function auctionStart() external view returns (uint64 startBlock);
+
+    /// @notice Returns the v4 position manager address used for tier three gating.
+    function v4PositionManager() external view returns (address);
+
+    /// @notice Returns the configured auction address.
+    function auction() external view returns (address);
 
     /// @notice Returns the phase one duration in blocks.
     /// @return duration The phase one duration in blocks.
@@ -55,10 +76,11 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @return uri The token URI string.
     function tokenURI() external view returns (string memory uri);
 
-    /// @notice Start the tiered access windows.
+    /// @notice Start the tiered access windows using the auction's configured start block.
+    /// @param auctionAddress The auction contract address.
     /// @param phaseOneBlocks The number of blocks for the tier-three-only phase.
     /// @param phaseTwoBlocks The number of blocks for the tier-two-and-three phase.
-    function startAuction(uint64 phaseOneBlocks, uint64 phaseTwoBlocks) external;
+    function startAuction(address auctionAddress, uint64 phaseOneBlocks, uint64 phaseTwoBlocks) external;
 
     /// @notice Returns the current phase (0 = not started, 1 = tier three, 2 = tier two/three, 3 = all tiers).
     function currentPhase() external view returns (uint8);
