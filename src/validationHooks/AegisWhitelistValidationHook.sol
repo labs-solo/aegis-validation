@@ -3,14 +3,18 @@ pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {IAegisWhitelistValidationHook} from "../interfaces/IAegisWhitelistValidationHook.sol";
 import {IContinuousClearingAuction} from "continuous-clearing-auction/src/interfaces/IContinuousClearingAuction.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
-contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable, ERC1155 {
+contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable, ERC1155, EIP712 {
     uint8 public constant TIER_ONE = 0;
     uint8 public constant TIER_TWO = 1;
     uint8 public constant TIER_THREE = 2;
+
+    bytes32 private constant MINT_TYPEHASH = keccak256("Mint(address account,uint8 tier,uint64 deadline)");
 
     address public v4PositionManager;
 
@@ -25,6 +29,7 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
     constructor(address v4PositionManager_)
         Ownable()
         ERC1155("")
+        EIP712("AegisWhitelistValidationHook", "1")
     {
         if (v4PositionManager_ == address(0)) revert InvalidV4PositionManager(v4PositionManager_);
         v4PositionManager = v4PositionManager_;
@@ -44,20 +49,17 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
         phaseTwoDuration = phaseTwoBlocks;
     }
 
-    // Owner-only minting for each tier membership token.
-    function mintTierOne() external onlyOwner {
-        if (balanceOf(msg.sender, TIER_ONE) != 0) revert AlreadyHasTier(TIER_ONE, msg.sender);
-        _mint(msg.sender, TIER_ONE, 1, "");
+    // Signature-gated minting for each tier membership token.
+    function mintTierOne(uint64 deadline, bytes calldata signature) external {
+        _mintTier(TIER_ONE, deadline, signature);
     }
 
-    function mintTierTwo() external onlyOwner {
-        if (balanceOf(msg.sender, TIER_TWO) != 0) revert AlreadyHasTier(TIER_TWO, msg.sender);
-        _mint(msg.sender, TIER_TWO, 1, "");
+    function mintTierTwo(uint64 deadline, bytes calldata signature) external {
+        _mintTier(TIER_TWO, deadline, signature);
     }
 
-    function mintTierThree() external onlyOwner {
-        if (balanceOf(msg.sender, TIER_THREE) != 0) revert AlreadyHasTier(TIER_THREE, msg.sender);
-        _mint(msg.sender, TIER_THREE, 1, "");
+    function mintTierThree(uint64 deadline, bytes calldata signature) external {
+        _mintTier(TIER_THREE, deadline, signature);
     }
 
     function uri(uint256) public view override returns (string memory) {
@@ -103,6 +105,21 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
 
         if (maxBid == 0) revert NoEligibleTier();
         if (amount > maxBid) revert ExceedsTierMaxBid(amount, maxBid);
+    }
+
+    function _mintTier(uint8 tier, uint64 deadline, bytes calldata signature) internal {
+        address account = msg.sender;
+        if (balanceOf(account, tier) != 0) revert AlreadyHasTier(tier, account);
+        _validateMintSignature(account, tier, deadline, signature);
+        _mint(account, tier, 1, "");
+    }
+
+    function _validateMintSignature(address account, uint8 tier, uint64 deadline, bytes calldata signature) internal {
+        if (block.timestamp > deadline) revert SignatureExpired(deadline);
+
+        bytes32 structHash = keccak256(abi.encode(MINT_TYPEHASH, account, tier, deadline));
+        bytes32 digest = _hashTypedDataV4(structHash);
+        if (ECDSA.recover(digest, signature) != account) revert InvalidSignature();
     }
 
     function currentPhase() public view returns (uint8) {

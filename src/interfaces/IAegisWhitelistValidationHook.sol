@@ -45,6 +45,13 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @param account The account missing a v4 position NFT.
     error MissingV4Position(address account);
 
+    /// @notice Thrown when a mint signature has expired.
+    /// @param deadline The signature deadline timestamp.
+    error SignatureExpired(uint64 deadline);
+
+    /// @notice Thrown when a mint signature is invalid.
+    error InvalidSignature();
+
     /// @notice Returns the max bid amount for a tier.
     /// @param tier The tier id.
     /// @return maxBid The max bid amount in wei.
@@ -88,16 +95,19 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     function blocksUntilPhaseThree() external view returns (uint256);
 
     /// @notice Mint a tier-one membership token.
-    /// @param to The address receiving the token.
-    function mintTierOne(address to) external;
+    /// @param deadline The signature deadline timestamp.
+    /// @param signature The signature authorizing the mint.
+    function mintTierOne(uint64 deadline, bytes calldata signature) external;
 
     /// @notice Mint a tier-two membership token.
-    /// @param to The address receiving the token.
-    function mintTierTwo(address to) external;
+    /// @param deadline The signature deadline timestamp.
+    /// @param signature The signature authorizing the mint.
+    function mintTierTwo(uint64 deadline, bytes calldata signature) external;
 
     /// @notice Mint a tier-three membership token.
-    /// @param to The address receiving the token.
-    function mintTierThree(address to) external;
+    /// @param deadline The signature deadline timestamp.
+    /// @param signature The signature authorizing the mint.
+    function mintTierThree(uint64 deadline, bytes calldata signature) external;
 
     /// @notice Update the metadata URI used for all tier tokens.
     /// @param _uri The new metadata URI.

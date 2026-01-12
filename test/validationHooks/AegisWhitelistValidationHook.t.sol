@@ -17,7 +17,16 @@ contract AegisWhitelistValidationHookTest is Test {
     uint256 private constant FLOOR_PRICE = 1000 << FixedPoint96.RESOLUTION;
     uint256 private constant TICK_SPACING = 100 << FixedPoint96.RESOLUTION;
 
-    uint256 private constant TIER_ONE_ID = 0;
+    uint8 private constant TIER_ONE_ID = 0;
+    uint8 private constant TIER_TWO_ID = 1;
+    uint8 private constant TIER_THREE_ID = 2;
+
+    uint64 private constant SIGNATURE_DEADLINE = type(uint64).max;
+    bytes32 private constant EIP712_DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+    bytes32 private constant MINT_TYPEHASH = keccak256("Mint(address account,uint8 tier,uint64 deadline)");
+    string private constant SIGNING_DOMAIN = "AegisWhitelistValidationHook";
+    string private constant SIGNING_VERSION = "1";
 
     uint64 private constant PHASE_ONE_BLOCKS = 26;
     uint64 private constant PHASE_TWO_BLOCKS = 24;
@@ -25,6 +34,8 @@ contract AegisWhitelistValidationHookTest is Test {
     address private alice;
     address private bob;
     address private carol;
+    uint256 private aliceKey;
+    uint256 private bobKey;
 
     AegisWhitelistValidationHook private hook;
     ContinuousClearingAuction private auction;
@@ -33,8 +44,8 @@ contract AegisWhitelistValidationHookTest is Test {
     uint256 private nextTokenId;
 
     function setUp() public {
-        alice = makeAddr("alice");
-        bob = makeAddr("bob");
+        (alice, aliceKey) = makeAddrAndKey("alice");
+        (bob, bobKey) = makeAddrAndKey("bob");
         carol = makeAddr("carol");
 
         positionManager = new MockERC721("V4 Positions", "V4POS");
@@ -64,7 +75,7 @@ contract AegisWhitelistValidationHookTest is Test {
 
     function test_submitBid_requiresAuctionStarted_reverts() public {
         _mintV4Position(alice);
-        hook.mintTierThree(alice);
+        _mintTierThree(alice, aliceKey);
         vm.deal(alice, 3 ether);
         vm.prank(alice);
         vm.expectRevert();
@@ -75,7 +86,7 @@ contract AegisWhitelistValidationHookTest is Test {
         _startAuction();
         _rollAfter(1);
         _mintV4Position(alice);
-        hook.mintTierThree(alice);
+        _mintTierThree(alice, aliceKey);
         vm.deal(alice, 3 ether);
         vm.prank(alice);
         uint256 bidId = auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, bytes(""));
@@ -86,7 +97,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_tierThreeOnlyWindow_rejectsTierTwo() public {
         _startAuction();
         _rollAfter(1);
-        hook.mintTierTwo(bob);
+        _mintTierTwo(bob, bobKey);
         vm.deal(bob, 3 ether);
         vm.prank(bob);
         vm.expectRevert();
@@ -96,7 +107,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_tierTwoWindow_allowsTierTwo() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + 1);
-        hook.mintTierTwo(bob);
+        _mintTierTwo(bob, bobKey);
         vm.deal(bob, 6 ether);
         vm.prank(bob);
         uint256 bidId = auction.submitBid{value: 4 ether}(FLOOR_PRICE + TICK_SPACING, 4 ether, bob, bytes(""));
@@ -107,7 +118,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_allTiersWindow_allowsTierOne() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
-        hook.mintTierOne(alice);
+        _mintTierOne(alice, aliceKey);
         vm.deal(alice, 3 ether);
         vm.prank(alice);
         uint256 bidId = auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, bytes(""));
@@ -118,7 +129,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_exceedsTierLimit_reverts() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
-        hook.mintTierOne(alice);
+        _mintTierOne(alice, aliceKey);
         vm.deal(alice, 3 ether);
         vm.prank(alice);
         vm.expectRevert();
@@ -128,7 +139,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_ownerMustMatchSender_reverts() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
-        hook.mintTierOne(alice);
+        _mintTierOne(alice, aliceKey);
         vm.deal(bob, 1 ether);
         vm.prank(bob);
         vm.expectRevert();
@@ -138,8 +149,8 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_bidIdStartsAtZeroAndIncrements() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
-        hook.mintTierOne(alice);
-        hook.mintTierTwo(bob);
+        _mintTierOne(alice, aliceKey);
+        _mintTierTwo(bob, bobKey);
 
         vm.deal(alice, 3 ether);
         vm.prank(alice);
@@ -162,21 +173,61 @@ contract AegisWhitelistValidationHookTest is Test {
     }
 
     function test_tierTokenTransfer_reverts() public {
-        hook.mintTierOne(alice);
+        _mintTierOne(alice, aliceKey);
         vm.prank(alice);
         vm.expectRevert();
         hook.safeTransferFrom(alice, bob, TIER_ONE_ID, 1, bytes(""));
     }
 
-    function test_mintTierThree_requiresV4Position() public {
+    function test_mintTier_requiresValidSignature_reverts() public {
+        bytes memory signature = _signMint(alice, bobKey, TIER_THREE_ID, SIGNATURE_DEADLINE);
+        vm.prank(alice);
         vm.expectRevert();
-        hook.mintTierThree(alice);
+        hook.mintTierThree(SIGNATURE_DEADLINE, signature);
     }
 
     function test_mintTier_revertsWhenAlreadyOwned() public {
-        hook.mintTierOne(alice);
+        _mintTierOne(alice, aliceKey);
         vm.expectRevert();
-        hook.mintTierOne(alice);
+        _mintTierOne(alice, aliceKey);
+    }
+
+    function _mintTierOne(address account, uint256 key) private {
+        bytes memory signature = _signMint(account, key, TIER_ONE_ID, SIGNATURE_DEADLINE);
+        vm.prank(account);
+        hook.mintTierOne(SIGNATURE_DEADLINE, signature);
+    }
+
+    function _mintTierTwo(address account, uint256 key) private {
+        bytes memory signature = _signMint(account, key, TIER_TWO_ID, SIGNATURE_DEADLINE);
+        vm.prank(account);
+        hook.mintTierTwo(SIGNATURE_DEADLINE, signature);
+    }
+
+    function _mintTierThree(address account, uint256 key) private {
+        bytes memory signature = _signMint(account, key, TIER_THREE_ID, SIGNATURE_DEADLINE);
+        vm.prank(account);
+        hook.mintTierThree(SIGNATURE_DEADLINE, signature);
+    }
+
+    function _signMint(address account, uint256 key, uint8 tier, uint64 deadline)
+        private
+        view
+        returns (bytes memory)
+    {
+        bytes32 domainSeparator = keccak256(
+            abi.encode(
+                EIP712_DOMAIN_TYPEHASH,
+                keccak256(bytes(SIGNING_DOMAIN)),
+                keccak256(bytes(SIGNING_VERSION)),
+                block.chainid,
+                address(hook)
+            )
+        );
+        bytes32 structHash = keccak256(abi.encode(MINT_TYPEHASH, account, tier, deadline));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, digest);
+        return abi.encodePacked(r, s, v);
     }
 
     function _startAuction() private {
