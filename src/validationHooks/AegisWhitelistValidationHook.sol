@@ -45,20 +45,19 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
     }
 
     // Owner-only minting for each tier membership token.
-    function mintTierOne(address to) external onlyOwner {
-        if (balanceOf(to, TIER_ONE) != 0) revert AlreadyHasTier(TIER_ONE, to);
-        _mint(to, TIER_ONE, 1, "");
+    function mintTierOne() external onlyOwner {
+        if (balanceOf(msg.sender, TIER_ONE) != 0) revert AlreadyHasTier(TIER_ONE, msg.sender);
+        _mint(msg.sender, TIER_ONE, 1, "");
     }
 
-    function mintTierTwo(address to) external onlyOwner {
-        if (balanceOf(to, TIER_TWO) != 0) revert AlreadyHasTier(TIER_TWO, to);
-        _mint(to, TIER_TWO, 1, "");
+    function mintTierTwo() external onlyOwner {
+        if (balanceOf(msg.sender, TIER_TWO) != 0) revert AlreadyHasTier(TIER_TWO, msg.sender);
+        _mint(msg.sender, TIER_TWO, 1, "");
     }
 
-    function mintTierThree(address to) external onlyOwner {
-        if (balanceOf(to, TIER_THREE) != 0) revert AlreadyHasTier(TIER_THREE, to);
-        if (IERC721(v4PositionManager).balanceOf(to) == 0) revert MissingV4Position(to);
-        _mint(to, TIER_THREE, 1, "");
+    function mintTierThree() external onlyOwner {
+        if (balanceOf(msg.sender, TIER_THREE) != 0) revert AlreadyHasTier(TIER_THREE, msg.sender);
+        _mint(msg.sender, TIER_THREE, 1, "");
     }
 
     function uri(uint256) public view override returns (string memory) {
