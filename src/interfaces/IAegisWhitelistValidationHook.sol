@@ -81,10 +81,10 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @notice Returns the current phase (0 = not started, 1 = tier three, 2 = tier two/three, 3 = all tiers).
     function currentPhase() external view returns (uint8);
 
-    /// @notice Returns remaining blocks until phase two begins.
+    /// @notice Returns remaining blocks until phase two begins (max uint256 if not started yet).
     function blocksUntilPhaseTwo() external view returns (uint256);
 
-    /// @notice Returns remaining blocks until phase three begins.
+    /// @notice Returns remaining blocks until phase three begins (max uint256 if not started yet).
     function blocksUntilPhaseThree() external view returns (uint256);
 
     /// @notice Mint a tier-one membership token.
