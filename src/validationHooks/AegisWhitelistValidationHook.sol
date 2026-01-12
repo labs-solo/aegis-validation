@@ -33,7 +33,7 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
         maxBidByTier[TIER_THREE] = 50 ether;
     }
 
-    // Owner or owner-originated transactions can begin the tiered access windows.
+    // Owner-only start for the tiered access windows.
     function startAuction(address auctionAddress, uint64 phaseOneBlocks, uint64 phaseTwoBlocks) external onlyOwner {
         if (auctionStart != 0) revert AuctionAlreadyStarted(auctionStart);
         if (auctionAddress == address(0)) revert AuctionNotSet();
@@ -108,7 +108,7 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
 
     function currentPhase() public view returns (uint8) {
         uint64 start = auctionStart;
-        if (start == 0) return 0;
+        if (start == 0 || block.number < start) return 0;
         uint256 elapsed = block.number - uint256(start);
         if (elapsed < phaseOneDuration) return 1;
         if (elapsed < uint256(phaseOneDuration) + uint256(phaseTwoDuration)) return 2;
@@ -117,7 +117,7 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
 
     function blocksUntilPhaseTwo() public view returns (uint256) {
         uint64 start = auctionStart;
-        if (start == 0) return 0;
+        if (start == 0 || block.number < start) return type(uint256).max;
         uint256 phaseTwoStart = uint256(start) + uint256(phaseOneDuration);
         if (block.number >= phaseTwoStart) return 0;
         return phaseTwoStart - block.number;
@@ -125,7 +125,7 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
 
     function blocksUntilPhaseThree() public view returns (uint256) {
         uint64 start = auctionStart;
-        if (start == 0) return 0;
+        if (start == 0 || block.number < start) return type(uint256).max;
         uint256 phaseThreeStart = uint256(start) + uint256(phaseOneDuration) + uint256(phaseTwoDuration);
         if (block.number >= phaseThreeStart) return 0;
         return phaseThreeStart - block.number;

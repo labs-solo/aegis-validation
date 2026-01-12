@@ -20,10 +20,6 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @param startedAt The block number of the existing start.
     error AuctionAlreadyStarted(uint64 startedAt);
 
-    /// @notice Thrown when a caller is not authorized to start the auction windows.
-    /// @param caller The unauthorized caller.
-    error UnauthorizedAuctionStarter(address caller);
-
     /// @notice Thrown when a bid exceeds the tier max bid for the current window.
     /// @param attempted The bid amount.
     /// @param maxBid The maximum allowed bid for the current window.
