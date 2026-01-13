@@ -41,6 +41,11 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @param account The account that already holds the tier token.
     error AlreadyHasTier(uint8 tier, address account);
 
+    /// @notice Thrown when the mint price is incorrect.
+    /// @param sent The amount of ether sent.
+    /// @param expected The expected mint price.
+    error InvalidMintPrice(uint256 sent, uint256 expected);
+
     /// @notice Thrown when minting tier three without holding a v4 position NFT.
     /// @param account The account missing a v4 position NFT.
     error MissingV4Position(address account);
@@ -78,6 +83,13 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @param phaseTwoBlocks The number of blocks for the tier-two-and-three phase.
     function startAuction(address auctionAddress, uint64 phaseOneBlocks, uint64 phaseTwoBlocks) external;
 
+    /// @notice Toggle validation checks for bids.
+    /// @param bypass Set true to bypass validation.
+    function removeValidation(bool bypass) external;
+
+    /// @notice Returns whether validation is currently bypassed.
+    function validationBypassed() external view returns (bool);
+
     /// @notice Returns the current phase (0 = not started, 1 = tier three, 2 = tier two/three, 3 = all tiers).
     function currentPhase() external view returns (uint8);
 
@@ -89,15 +101,15 @@ interface IAegisWhitelistValidationHook is IValidationHook {
 
     /// @notice Mint a tier-one membership token.
     /// @param to The address receiving the token.
-    function mintTierOne(address to) external;
+    function mintTierOne(address to) external payable;
 
     /// @notice Mint a tier-two membership token.
     /// @param to The address receiving the token.
-    function mintTierTwo(address to) external;
+    function mintTierTwo(address to) external payable;
 
     /// @notice Mint a tier-three membership token.
     /// @param to The address receiving the token.
-    function mintTierThree(address to) external;
+    function mintTierThree(address to) external payable;
 
     /// @notice Update the metadata URI used for all tier tokens.
     /// @param _uri The new metadata URI.

@@ -11,8 +11,10 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
     uint8 public constant TIER_ONE = 0;
     uint8 public constant TIER_TWO = 1;
     uint8 public constant TIER_THREE = 2;
+    uint256 public constant MINT_PRICE = 0.001 ether;
 
     address public v4PositionManager;
+    bool public validationBypassed;
 
     mapping(uint8 => uint128) public maxBidByTier;
     address public auction;
@@ -44,20 +46,24 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
         phaseTwoDuration = phaseTwoBlocks;
     }
 
+    function removeValidation(bool bypass) external onlyOwner {
+        validationBypassed = bypass;
+    }
+
     // Owner-only minting for each tier membership token.
-    function mintTierOne() external onlyOwner {
-        if (balanceOf(msg.sender, TIER_ONE) != 0) revert AlreadyHasTier(TIER_ONE, msg.sender);
-        _mint(msg.sender, TIER_ONE, 1, "");
+    function mintTierOne(address to) external payable {
+        _assertMintPrice();
+        _mint(to, TIER_ONE, 1, "");
     }
 
-    function mintTierTwo() external onlyOwner {
-        if (balanceOf(msg.sender, TIER_TWO) != 0) revert AlreadyHasTier(TIER_TWO, msg.sender);
-        _mint(msg.sender, TIER_TWO, 1, "");
+    function mintTierTwo(address to) external payable {
+        _assertMintPrice();
+        _mint(to, TIER_TWO, 1, "");
     }
 
-    function mintTierThree() external onlyOwner {
-        if (balanceOf(msg.sender, TIER_THREE) != 0) revert AlreadyHasTier(TIER_THREE, msg.sender);
-        _mint(msg.sender, TIER_THREE, 1, "");
+    function mintTierThree(address to) external payable {
+        _assertMintPrice();
+        _mint(to, TIER_THREE, 1, "");
     }
 
     function uri(uint256) public view override returns (string memory) {
@@ -70,6 +76,7 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
 
     // Validate bids using tier membership and time-window gating.
     function validate(uint256, uint128 amount, address owner, address sender, bytes calldata) external override {
+        if (validationBypassed) return;
         if (owner != sender) revert OwnerSenderMismatch(owner, sender);
 
         uint64 start = auctionStart;
@@ -105,6 +112,10 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
         if (amount > maxBid) revert ExceedsTierMaxBid(amount, maxBid);
     }
 
+    function _assertMintPrice() private view {
+        if (msg.value < MINT_PRICE) revert InvalidMintPrice(msg.value, MINT_PRICE);
+    }
+
     function currentPhase() public view returns (uint8) {
         uint64 start = auctionStart;
         if (start == 0 || block.number < start) return 0;
@@ -128,17 +139,5 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
         uint256 phaseThreeStart = uint256(start) + uint256(phaseOneDuration) + uint256(phaseTwoDuration);
         if (block.number >= phaseThreeStart) return 0;
         return phaseThreeStart - block.number;
-    }
-
-    function _beforeTokenTransfer(
-        address operator,
-        address from,
-        address to,
-        uint256[] memory ids,
-        uint256[] memory amounts,
-        bytes memory data
-    ) internal override {
-        if (from != address(0) && to != address(0)) revert TransfersDisabled();
-        super._beforeTokenTransfer(operator, from, to, ids, amounts, data);
     }
 }
