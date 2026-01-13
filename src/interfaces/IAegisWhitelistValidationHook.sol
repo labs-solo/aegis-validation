@@ -12,10 +12,6 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @notice Thrown when the auction address has not been configured.
     error AuctionNotSet();
 
-    /// @notice Thrown when the v4 position manager address is invalid.
-    /// @param manager The provided manager address.
-    error InvalidV4PositionManager(address manager);
-
     /// @notice Thrown when attempting to start the auction twice.
     /// @param startedAt The block number of the existing start.
     error AuctionAlreadyStarted(uint64 startedAt);
@@ -46,10 +42,6 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @param expected The expected mint price.
     error InvalidMintPrice(uint256 sent, uint256 expected);
 
-    /// @notice Thrown when minting tier three without holding a v4 position NFT.
-    /// @param account The account missing a v4 position NFT.
-    error MissingV4Position(address account);
-
     /// @notice Returns the max bid amount for a tier.
     /// @param tier The tier id.
     /// @return maxBid The max bid amount in wei.
@@ -58,9 +50,6 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @notice Returns the auction start block.
     /// @return startBlock The start block number.
     function auctionStart() external view returns (uint64 startBlock);
-
-    /// @notice Returns the v4 position manager address used for tier three gating.
-    function v4PositionManager() external view returns (address);
 
     /// @notice Returns the configured auction address.
     function auction() external view returns (address);

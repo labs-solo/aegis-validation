@@ -33,9 +33,8 @@ contract AegisHookedAuctionFactory {
     event AuctionDeployed(address indexed hook, address indexed auction, address indexed caller, bytes32 salt);
 
     /// @notice Deploy a hook.
-    /// @param v4PositionManager The v4 position manager used for tier-three gating.
-    function deployHook(address v4PositionManager) external returns (address hook) {
-        AegisWhitelistValidationHook hook_ = new AegisWhitelistValidationHook(v4PositionManager);
+    function deployHook() external returns (address hook) {
+        AegisWhitelistValidationHook hook_ = new AegisWhitelistValidationHook();
         hook_.transferOwnership(msg.sender);
 
         hook = address(hook_);
