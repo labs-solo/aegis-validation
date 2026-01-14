@@ -37,6 +37,9 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @param account The account that already holds the tier token.
     error AlreadyHasTier(uint8 tier, address account);
 
+    /// @notice Thrown when minting is disabled.
+    error MintingDisabled();
+
     /// @notice Thrown when the mint price is incorrect.
     /// @param sent The amount of ether sent.
     /// @param expected The expected mint price.
@@ -71,6 +74,13 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @param phaseOneBlocks The number of blocks for the tier-three-only phase.
     /// @param phaseTwoBlocks The number of blocks for the tier-two-and-three phase.
     function startAuction(address auctionAddress, uint64 phaseOneBlocks, uint64 phaseTwoBlocks) external;
+
+    /// @notice Toggle whether minting is enabled.
+    /// @param enabled Set true to enable minting.
+    function setMintingEnabled(bool enabled) external;
+
+    /// @notice Returns whether minting is enabled.
+    function mintingEnabled() external view returns (bool);
 
     /// @notice Toggle validation checks for bids.
     /// @param bypass Set true to bypass validation.

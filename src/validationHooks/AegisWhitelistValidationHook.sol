@@ -12,7 +12,8 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
     uint8 public constant TIER_THREE = 2;
     uint256 public constant MINT_PRICE = 0.001 ether;
 
-    bool public validationBypassed;
+    bool public validationBypassed = false;
+    bool public mintingEnabled = true;
 
     mapping(uint8 => uint128) public maxBidByTier;
     address public auction;
@@ -44,19 +45,26 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
         validationBypassed = bypass;
     }
 
+    function setMintingEnabled(bool enabled) external onlyOwner {
+        mintingEnabled = enabled;
+    }
+
     function mintTierOne(address to) external payable {
+        if (!mintingEnabled) revert MintingDisabled();
         _assertMintPrice();
         if (balanceOf(to, TIER_ONE) != 0) revert AlreadyHasTier(TIER_ONE, to);
         _mint(to, TIER_ONE, 1, "");
     }
 
     function mintTierTwo(address to) external payable {
+        if (!mintingEnabled) revert MintingDisabled();
         _assertMintPrice();
         if (balanceOf(to, TIER_TWO) != 0) revert AlreadyHasTier(TIER_TWO, to);
         _mint(to, TIER_TWO, 1, "");
     }
 
     function mintTierThree(address to) external payable {
+        if (!mintingEnabled) revert MintingDisabled();
         _assertMintPrice();
         if (balanceOf(to, TIER_THREE) != 0) revert AlreadyHasTier(TIER_THREE, to);
         _mint(to, TIER_THREE, 1, "");
