@@ -50,28 +50,28 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
         mintingEnabled = enabled;
     }
 
-    function mintTierOne(address to, address referrer) external payable {
+    function mintTierOne(address referrer) external payable {
         if (!mintingEnabled) revert MintingDisabled();
         _assertMintPrice();
-        _setReferrer(to, referrer);
-        if (balanceOf(to, TIER_ONE) != 0) revert AlreadyHasTier(TIER_ONE, to);
-        _mint(to, TIER_ONE, 1, "");
+        _setReferrer(msg.sender, referrer);
+        if (balanceOf(msg.sender, TIER_ONE) != 0) revert AlreadyHasTier(TIER_ONE, msg.sender);
+        _mint(msg.sender, TIER_ONE, 1, "");
     }
 
-    function mintTierTwo(address to, address referrer) external payable {
+    function mintTierTwo(address referrer) external payable {
         if (!mintingEnabled) revert MintingDisabled();
         _assertMintPrice();
-        _setReferrer(to, referrer);
-        if (balanceOf(to, TIER_TWO) != 0) revert AlreadyHasTier(TIER_TWO, to);
-        _mint(to, TIER_TWO, 1, "");
+        _setReferrer(msg.sender, referrer);
+        if (balanceOf(msg.sender, TIER_TWO) != 0) revert AlreadyHasTier(TIER_TWO, msg.sender);
+        _mint(msg.sender, TIER_TWO, 1, "");
     }
 
-    function mintTierThree(address to, address referrer) external payable {
+    function mintTierThree(address referrer) external payable {
         if (!mintingEnabled) revert MintingDisabled();
         _assertMintPrice();
-        _setReferrer(to, referrer);
-        if (balanceOf(to, TIER_THREE) != 0) revert AlreadyHasTier(TIER_THREE, to);
-        _mint(to, TIER_THREE, 1, "");
+        _setReferrer(msg.sender, referrer);
+        if (balanceOf(msg.sender, TIER_THREE) != 0) revert AlreadyHasTier(TIER_THREE, msg.sender);
+        _mint(msg.sender, TIER_THREE, 1, "");
     }
 
     function uri(uint256) public view override returns (string memory) {

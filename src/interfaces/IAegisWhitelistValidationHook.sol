@@ -107,19 +107,16 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     function blocksUntilPhaseThree() external view returns (uint256);
 
     /// @notice Mint a tier-one membership token.
-    /// @param to The address receiving the token.
     /// @param referrer The referrer address for this minter.
-    function mintTierOne(address to, address referrer) external payable;
+    function mintTierOne(address referrer) external payable;
 
     /// @notice Mint a tier-two membership token.
-    /// @param to The address receiving the token.
     /// @param referrer The referrer address for this minter.
-    function mintTierTwo(address to, address referrer) external payable;
+    function mintTierTwo(address referrer) external payable;
 
     /// @notice Mint a tier-three membership token.
-    /// @param to The address receiving the token.
     /// @param referrer The referrer address for this minter.
-    function mintTierThree(address to, address referrer) external payable;
+    function mintTierThree(address referrer) external payable;
 
     /// @notice Withdraw accumulated mint proceeds.
     /// @param to The recipient of the funds.
