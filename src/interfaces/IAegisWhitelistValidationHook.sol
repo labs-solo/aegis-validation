@@ -6,6 +6,10 @@ import {IValidationHook} from "continuous-clearing-auction/src/interfaces/IValid
 /// @title IAegisWhitelistValidationHook
 /// @notice Interface for the tiered membership validation hook used by the auction.
 interface IAegisWhitelistValidationHook is IValidationHook {
+    /// @notice Emitted when a minter sets their referrer for the first time.
+    /// @param minter The minter address.
+    /// @param referrer The referrer address.
+    event ReferrerSet(address indexed minter, address indexed referrer);
     /// @notice Thrown when the auction start has not been initialized.
     error AuctionNotStarted();
 
@@ -82,6 +86,10 @@ interface IAegisWhitelistValidationHook is IValidationHook {
     /// @notice Returns whether minting is enabled.
     function mintingEnabled() external view returns (bool);
 
+    /// @notice Returns the referrer set for a minter.
+    /// @param minter The minter address.
+    function referrerOf(address minter) external view returns (address);
+
     /// @notice Toggle validation checks for bids.
     /// @param bypass Set true to bypass validation.
     function removeValidation(bool bypass) external;
@@ -100,15 +108,22 @@ interface IAegisWhitelistValidationHook is IValidationHook {
 
     /// @notice Mint a tier-one membership token.
     /// @param to The address receiving the token.
-    function mintTierOne(address to) external payable;
+    /// @param referrer The referrer address for this minter.
+    function mintTierOne(address to, address referrer) external payable;
 
     /// @notice Mint a tier-two membership token.
     /// @param to The address receiving the token.
-    function mintTierTwo(address to) external payable;
+    /// @param referrer The referrer address for this minter.
+    function mintTierTwo(address to, address referrer) external payable;
 
     /// @notice Mint a tier-three membership token.
     /// @param to The address receiving the token.
-    function mintTierThree(address to) external payable;
+    /// @param referrer The referrer address for this minter.
+    function mintTierThree(address to, address referrer) external payable;
+
+    /// @notice Withdraw accumulated mint proceeds.
+    /// @param to The recipient of the funds.
+    function withdraw(address to) external;
 
     /// @notice Update the metadata URI used for all tier tokens.
     /// @param _uri The new metadata URI.

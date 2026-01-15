@@ -15,6 +15,7 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
     bool public validationBypassed = false;
     bool public mintingEnabled = true;
 
+    mapping(address => address) public referrerOf;
     mapping(uint8 => uint128) public maxBidByTier;
     address public auction;
     uint64 public auctionStart;
@@ -49,23 +50,26 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
         mintingEnabled = enabled;
     }
 
-    function mintTierOne(address to) external payable {
+    function mintTierOne(address to, address referrer) external payable {
         if (!mintingEnabled) revert MintingDisabled();
         _assertMintPrice();
+        _setReferrer(to, referrer);
         if (balanceOf(to, TIER_ONE) != 0) revert AlreadyHasTier(TIER_ONE, to);
         _mint(to, TIER_ONE, 1, "");
     }
 
-    function mintTierTwo(address to) external payable {
+    function mintTierTwo(address to, address referrer) external payable {
         if (!mintingEnabled) revert MintingDisabled();
         _assertMintPrice();
+        _setReferrer(to, referrer);
         if (balanceOf(to, TIER_TWO) != 0) revert AlreadyHasTier(TIER_TWO, to);
         _mint(to, TIER_TWO, 1, "");
     }
 
-    function mintTierThree(address to) external payable {
+    function mintTierThree(address to, address referrer) external payable {
         if (!mintingEnabled) revert MintingDisabled();
         _assertMintPrice();
+        _setReferrer(to, referrer);
         if (balanceOf(to, TIER_THREE) != 0) revert AlreadyHasTier(TIER_THREE, to);
         _mint(to, TIER_THREE, 1, "");
     }
@@ -115,8 +119,21 @@ contract AegisWhitelistValidationHook is IAegisWhitelistValidationHook, Ownable,
         if (amount > maxBid) revert ExceedsTierMaxBid(amount, maxBid);
     }
 
+    function withdraw(address to) external onlyOwner {
+        uint256 balance = address(this).balance;
+        if (balance == 0) return;
+        (bool success, ) = to.call{value: balance}("");
+        require(success, "WITHDRAW_FAILED");
+    }
+
     function _assertMintPrice() private view {
         if (msg.value < MINT_PRICE) revert InvalidMintPrice(msg.value, MINT_PRICE);
+    }
+
+    function _setReferrer(address to, address referrer) private {
+        if (referrerOf[to] != address(0)) return;
+        referrerOf[to] = referrer;
+        emit ReferrerSet(to, referrer);
     }
 
     function currentPhase() public view returns (uint8) {

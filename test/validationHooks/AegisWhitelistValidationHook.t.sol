@@ -56,7 +56,7 @@ contract AegisWhitelistValidationHookTest is Test {
     }
 
     function test_submitBid_requiresAuctionStarted_reverts() public {
-        hook.mintTierThree{value: MINT_PRICE}(alice);
+        hook.mintTierThree{value: MINT_PRICE}(alice, address(0));
         vm.deal(alice, 3 ether);
         vm.prank(alice);
         vm.expectRevert();
@@ -66,7 +66,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_tierThreeOnlyWindow_allowsTierThree() public {
         _startAuction();
         _rollAfter(1);
-        hook.mintTierThree{value: MINT_PRICE}(alice);
+        hook.mintTierThree{value: MINT_PRICE}(alice, address(0));
         vm.deal(alice, 3 ether);
         vm.prank(alice);
         uint256 bidId = auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, bytes(""));
@@ -77,7 +77,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_tierThreeOnlyWindow_rejectsTierTwo() public {
         _startAuction();
         _rollAfter(1);
-        hook.mintTierTwo{value: MINT_PRICE}(bob);
+        hook.mintTierTwo{value: MINT_PRICE}(bob, address(0));
         vm.deal(bob, 3 ether);
         vm.prank(bob);
         vm.expectRevert();
@@ -87,7 +87,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_tierTwoWindow_allowsTierTwo() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + 1);
-        hook.mintTierTwo{value: MINT_PRICE}(bob);
+        hook.mintTierTwo{value: MINT_PRICE}(bob, address(0));
         vm.deal(bob, 6 ether);
         vm.prank(bob);
         uint256 bidId = auction.submitBid{value: 4 ether}(FLOOR_PRICE + TICK_SPACING, 4 ether, bob, bytes(""));
@@ -98,7 +98,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_allTiersWindow_allowsTierOne() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
-        hook.mintTierOne{value: MINT_PRICE}(alice);
+        hook.mintTierOne{value: MINT_PRICE}(alice, address(0));
         vm.deal(alice, 3 ether);
         vm.prank(alice);
         uint256 bidId = auction.submitBid{value: 2 ether}(FLOOR_PRICE + TICK_SPACING, 2 ether, alice, bytes(""));
@@ -109,7 +109,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_exceedsTierLimit_reverts() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
-        hook.mintTierOne{value: MINT_PRICE}(alice);
+        hook.mintTierOne{value: MINT_PRICE}(alice, address(0));
         vm.deal(alice, 3 ether);
         vm.prank(alice);
         vm.expectRevert();
@@ -119,7 +119,7 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_ownerMustMatchSender_reverts() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
-        hook.mintTierOne{value: MINT_PRICE}(alice);
+        hook.mintTierOne{value: MINT_PRICE}(alice, address(0));
         vm.deal(bob, 1 ether);
         vm.prank(bob);
         vm.expectRevert();
@@ -129,8 +129,8 @@ contract AegisWhitelistValidationHookTest is Test {
     function test_submitBid_bidIdStartsAtZeroAndIncrements() public {
         _startAuction();
         _rollAfter(uint256(PHASE_ONE_BLOCKS) + uint256(PHASE_TWO_BLOCKS) + 1);
-        hook.mintTierOne{value: MINT_PRICE}(alice);
-        hook.mintTierTwo{value: MINT_PRICE}(bob);
+        hook.mintTierOne{value: MINT_PRICE}(alice, address(0));
+        hook.mintTierTwo{value: MINT_PRICE}(bob, address(0));
 
         vm.deal(alice, 3 ether);
         vm.prank(alice);
